@@ -46,6 +46,7 @@ def pp(item):
 # All of vin has to sum to vout
 # What doesn't add up goes to miners
 def parse_transaction(block, transaction):
+    # TODO: Convert amounts to satoshis
     tx = {
             'txid': transaction['txid'],
             'sources': [],
@@ -86,34 +87,18 @@ def parse_transaction(block, transaction):
     return tx
 
 
-block = CLIENT.getblock(CLIENT.getblockhash(100001))
-# Modern block, lots of transactions
-# vins have references to txids instead of addresses (must get those transactions and get the vouts as the new vin (jfc))
-for tx in transaction_gen(block):
-    pp(parse_transaction(block, tx))
-
-sys.exit(1)
+# block = CLIENT.getblock(CLIENT.getblockhash(100001))
+# # Modern block, lots of transactions
+# # vins have references to txids instead of addresses (must get those transactions and get the vouts as the new vin (jfc))
+# for tx in transaction_gen(block):
+#     pp(parse_transaction(block, tx))
+# 
+# sys.exit(1)
 
 # We skip the genesis block as it has no ordinary transactions
 start_hash = CLIENT.getblockhash(2)
 print(start_hash)
 for block in block_gen(start_hash):
-    print(block)
-    inputs = []
-    outputs = []
     for tx in transaction_gen(block):
-        print(tx)
-        inputs = tx['vin']
-        for output in tx['vout']:
-            outputs.append({
-                'satoshis': int(output['value'] * SATOSHI_CONVERSION),
-                'addresses': output['scriptPubKey']['addresses']
-            })
-
-    print({
-        'hash': block['hash'],
-        'inputs': inputs,
-        'outputs': outputs
-    })
-
+        pp(parse_transaction(block, tx))
 
