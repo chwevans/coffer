@@ -2,8 +2,14 @@ import os
 import sys
 import functools
 import simplejson as json
+import psycopg2
 
 from bitcoinrpc.authproxy import AuthServiceProxy, JSONRPCException
+
+def env(key, default):
+    if key in os.environ:
+        return os.environ[key]
+    return default
 
 rpc_url = "http://%s:%s@%s" % (os.environ['BTC_USER'], os.environ['BTC_PASS'], os.environ['BTC_HOST'])
 CLIENT = AuthServiceProxy(rpc_url)
@@ -11,6 +17,28 @@ SATOSHI_CONVERSION = 100000000
 
 START_COINBASE = 50.0
 HALF_PERIOD = 210000
+
+PG = psycopg2.connect(
+        dbname=env('DB_NAME', 'coffer'),
+        user=env('DB_USER', 'coffer'),
+        password=env('DB_PASS', 'coffer'),
+        host=env('DB_HOST', 'localhost')
+)
+
+def write_transaction(conn, txs):
+    params = []
+    for tx in txs:
+        for source in tx['sources']:
+            if source['type'] == 'address':
+                params.append({'address': source['address'], 'balance': -int(source['amount'] * SATOSHI_CONVERSION)})
+        for output in tx['outputs']:
+            params.append({'address': output['address'], 'balance': int(output['amount'] * SATOSHI_CONVERSION)})
+
+    cur = conn.cursor()
+    cur.executemany("INSERT INTO address_balances (address, balance) VALUES (%(address)s, %(balance)s) ON CONFLICT (address) DO UPDATE SET balance = address_balances.balance + %(balance)s;",
+            params)
+    conn.commit()
+    cur.close()
 
 def block_reward(block_height):
     # Note that the power of 2 is using integer division.
@@ -99,6 +127,7 @@ def parse_transaction(block, transaction):
 start_hash = CLIENT.getblockhash(2)
 print(start_hash)
 for block in block_gen(start_hash):
-    for tx in transaction_gen(block):
-        pp(parse_transaction(block, tx))
+    txs = [parse_transaction(block, tx) for tx in transaction_gen(block)]
+    write_transaction(PG, txs)
+    pp(txs)
 
